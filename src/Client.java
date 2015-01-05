@@ -6,43 +6,63 @@ import java.net.Socket;
  */
 public class Client
 {
-    private static ObjectOutputStream sender;
-    private static Client client = new Client();
-    private static ClientCallBack callBack;
-    private static ObjectInputStream receiver;
-    private static Socket socket;
-    private Client() {}
+    private ObjectOutputStream sender;
+    private ClientCallBack callBack;
+    private ObjectInputStream receiver;
+    private Socket socket;
+    private boolean isConnected = false;
+    public Client() {}
 
-    public static Client getInstance()
-    {
-        return client;
-    }
-
-    public Client setHost(String ip, int port)
+    public void setHost(String ip, int port)
     {
         try {
             socket = new Socket(ip, port);
-            sender = (new ObjectOutputStream(socket.getOutputStream()));
+            isConnected = true;
+            sender = new ObjectOutputStream(socket.getOutputStream());
             receiver = new ObjectInputStream(socket.getInputStream());
         } catch (IOException e) {
             e.printStackTrace();
+            try {
+                socket.close();
+                isConnected = false;
+                callBack.onSocketClosed();
+            } catch (IOException e1) {
+                e1.printStackTrace();
+            }
         }
 
-        return this;
+        new Thread(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                while (isConnected) {
+                    Object readObject = null;
+                    try {
+                        readObject = receiver.readObject();
+                    } catch (IOException e) {
+                        try {
+                            socket.close();
+                            isConnected = false;
+                            callBack.onSocketClosed();
+                        } catch (IOException e1) {
+                            e1.printStackTrace();
+                            isConnected = false;
+                        }
+                        e.printStackTrace();
+                    } catch (ClassNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                    callBack.onMessage(readObject);
+                }
+            }
+        }).start();
     }
 
-    public void send(Object object)
+    public void send(Object object) throws IOException
     {
-        try {
-            sender.writeObject(object);
-            sender.flush();
-            Object readObject = receiver.readObject();
-            callBack.onMessage(readObject);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
+        sender.writeObject(object);
+        sender.flush();
     }
 
     public void setCallBack(ClientCallBack callBack)
@@ -54,6 +74,7 @@ public class Client
     {
         try {
             socket.close();
+            callBack.onSocketClosed();
         } catch (IOException e) {
             e.printStackTrace();
         }

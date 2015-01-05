@@ -4,4 +4,5 @@
 public interface ClientCallBack
 {
     void onMessage(Object object);
+    void onSocketClosed();
 }
